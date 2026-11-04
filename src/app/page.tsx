@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import { Conversation, Message, GeneratedFile } from "@/lib/types";
 import DocumentCard from "@/components/chat/DocumentCard";
+import ReactMarkdown from "react-markdown";
 
 interface ChatMessage extends Message {
   file?: GeneratedFile;
@@ -167,10 +168,10 @@ export default function ChatPage() {
   ];
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 min-h-0 flex h-full overflow-hidden">
       {/* Sidebar: Conversations */}
-      <aside className="w-64 sm:w-72 bg-zinc-900/60 border-r border-zinc-800 flex flex-col">
-        <div className="p-3 border-b border-zinc-800">
+      <aside className="w-64 sm:w-72 bg-zinc-900/60 border-r border-zinc-800 flex flex-col h-full shrink-0">
+        <div className="p-3 border-b border-zinc-800 shrink-0">
           <button
             onClick={handleNewChat}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow transition-colors"
@@ -179,7 +180,7 @@ export default function ChatPage() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
           {conversations.length === 0 ? (
             <div className="p-4 text-center text-xs text-zinc-500">No conversations yet</div>
           ) : (
@@ -209,16 +210,16 @@ export default function ChatPage() {
       </aside>
 
       {/* Main Chat Area */}
-      <main className="flex-1 flex flex-col bg-zinc-950">
+      <main className="flex-1 min-h-0 flex flex-col bg-zinc-950 h-full overflow-hidden">
         {summary && (
-          <div className="px-6 py-2 bg-zinc-900/50 border-b border-zinc-800 text-[11px] text-zinc-400 flex items-center gap-2">
+          <div className="shrink-0 px-6 py-2 bg-zinc-900/50 border-b border-zinc-800 text-[11px] text-zinc-400 flex items-center gap-2">
             <span className="font-semibold text-zinc-300">Session Context:</span>
             <span className="truncate">{summary}</span>
           </div>
         )}
 
         {/* Message Thread */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center max-w-md mx-auto text-center space-y-4">
               <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-2xl shadow">
@@ -263,7 +264,49 @@ export default function ChatPage() {
                         </span>
                       </div>
                     )}
-                    <div className="text-sm whitespace-pre-wrap leading-relaxed">{m.content}</div>
+                    {isUser ? (
+                      <div className="text-sm whitespace-pre-wrap leading-relaxed">{m.content}</div>
+                    ) : (
+                      <div className="text-sm leading-relaxed text-zinc-100">
+                        <ReactMarkdown
+                          components={{
+                            p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+                            strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
+                            em: ({ children }) => <em className="italic">{children}</em>,
+                            ol: ({ children }) => <ol className="list-decimal list-outside ml-5 space-y-1 my-2">{children}</ol>,
+                            ul: ({ children }) => <ul className="list-disc list-outside ml-5 space-y-1 my-2">{children}</ul>,
+                            li: ({ children }) => <li className="leading-relaxed pl-1">{children}</li>,
+                            code: ({ className, children, ...props }) => {
+                              const isInline = !className?.includes("language-") && typeof children === "string" && !children.includes("\n");
+                              return isInline ? (
+                                <code className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-indigo-300" {...props}>
+                                  {children}
+                                </code>
+                              ) : (
+                                <code className="block overflow-x-auto rounded-lg bg-zinc-950 p-3 font-mono text-xs text-zinc-200 border border-zinc-800 my-2" {...props}>
+                                  {children}
+                                </code>
+                              );
+                            },
+                            a: ({ href, children }) => (
+                              <a href={href} target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline hover:text-indigo-300">
+                                {children}
+                              </a>
+                            ),
+                            h1: ({ children }) => <h1 className="text-lg font-bold text-white my-2">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-base font-bold text-white my-2">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-sm font-semibold text-white my-1.5">{children}</h3>,
+                            blockquote: ({ children }) => (
+                              <blockquote className="border-l-2 border-indigo-500 pl-3 italic text-zinc-400 my-2">
+                                {children}
+                              </blockquote>
+                            ),
+                          }}
+                        >
+                          {m.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
 
                     {/* Attached Generated File */}
                     {m.file && <DocumentCard file={m.file} />}
@@ -294,7 +337,7 @@ export default function ChatPage() {
         </div>
 
         {/* Composer */}
-        <div className="p-4 border-t border-zinc-800 bg-zinc-900/40">
+        <div className="shrink-0 p-4 border-t border-zinc-800 bg-zinc-900/40">
           <div className="max-w-4xl mx-auto">
             <div className="relative rounded-xl border border-zinc-700/80 bg-zinc-950 shadow-inner focus-within:border-indigo-500">
               <textarea

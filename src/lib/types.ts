@@ -28,6 +28,7 @@ export interface Message {
     format?: string;
     [key: string]: unknown;
   };
+  file?: GeneratedFile;
 }
 
 export interface Conversation {
@@ -73,6 +74,7 @@ export interface DiscoveredTool {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+  read_only?: boolean;
 }
 
 export interface MicrosoftStatus {
@@ -91,3 +93,17 @@ export interface MicrosoftStatus {
   fallback_active: boolean;
 }
 
+export interface GoogleDocsStatus {
+  enabled: boolean;
+  server_url: string;
+  transport: string;
+  connected: boolean;
+  authenticated: boolean;
+  discovered_tools: DiscoveredTool[];
+  capabilities: {
+    read_doc: boolean;
+    update_doc: boolean;
+  };
+  preview_program_required: boolean;
+  error?: string;
+}

@@ -59,7 +59,12 @@ export default function DocumentCard({ file }: DocumentCardProps) {
             {formatBadge.icon}
           </div>
           <div>
-            <h4 className="text-sm font-semibold text-zinc-100 break-all">{file.file_name}</h4>
+            <h4
+              className="text-sm font-semibold text-zinc-100 break-words [overflow-wrap:anywhere]"
+              title={file.file_name}
+            >
+              {file.file_name}
+            </h4>
             <div className="flex items-center gap-2 mt-1">
               <span
                 className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${formatBadge.bg}`}

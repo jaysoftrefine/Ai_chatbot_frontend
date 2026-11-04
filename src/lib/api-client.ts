@@ -3,6 +3,7 @@ import {
   Conversation,
   ConversationDetail,
   GeneratedFile,
+  GoogleDocsStatus,
   MicrosoftStatus,
   PersonaGrouped,
   PersonaPreference,
@@ -40,6 +41,7 @@ class ApiClient {
     if (res.status === 401) {
       if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login") && !window.location.pathname.startsWith("/register")) {
         localStorage.removeItem("token");
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = "/login";
       }
       throw new Error("Unauthorized");
@@ -196,6 +198,11 @@ class ApiClient {
   // Microsoft Status
   async getMicrosoftStatus(): Promise<MicrosoftStatus> {
     return this.request<MicrosoftStatus>("/api/v1/integrations/microsoft/status");
+  }
+
+  // Google Docs MCP Status
+  async getGoogleDocsStatus(): Promise<GoogleDocsStatus> {
+    return this.request<GoogleDocsStatus>("/api/v1/integrations/google-docs/status");
   }
 }
 
