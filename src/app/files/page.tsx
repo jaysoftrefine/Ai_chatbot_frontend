@@ -12,6 +12,8 @@ export default function FilesPage() {
 
   const [files, setFiles] = useState<GeneratedFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,6 +49,28 @@ export default function FilesPage() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
+
+    const file = selectedFiles[0];
+    setUploading(true);
+    setError(null);
+    setUploadSuccess(null);
+
+    try {
+      await api.uploadFile(file);
+      setUploadSuccess(`"${file.name}" uploaded and indexed into RAG successfully!`);
+      await loadFiles();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to upload file");
+    } finally {
+      setUploading(false);
+      // Reset input
+      e.target.value = "";
+    }
+  };
+
   if (isLoading || !user) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -57,20 +81,38 @@ export default function FilesPage() {
 
   return (
     <div className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-8 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Generated Files</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Files & Knowledge Base</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            All Office documents created during your chat sessions.
+            All files uploaded or generated are automatically indexed into RAG memory for the assistant.
           </p>
         </div>
-        <button
-          onClick={loadFiles}
-          className="px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-900 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
-        >
-          ↻ Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="cursor-pointer px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors flex items-center gap-2 shadow-sm">
+            <span>{uploading ? "⏳ Indexing..." : "↑ Upload Document"}</span>
+            <input
+              type="file"
+              disabled={uploading}
+              onChange={handleFileUpload}
+              className="hidden"
+              accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.json"
+            />
+          </label>
+          <button
+            onClick={loadFiles}
+            className="px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-900 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+          >
+            ↻ Refresh
+          </button>
+        </div>
       </div>
+
+      {uploadSuccess && (
+        <div className="p-3 rounded-lg bg-emerald-950/60 border border-emerald-800 text-xs text-emerald-300">
+          ✓ {uploadSuccess}
+        </div>
+      )}
 
       {error && (
         <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-800 text-xs text-rose-300">
@@ -107,7 +149,11 @@ export default function FilesPage() {
                     ? "text-emerald-400 bg-emerald-950/60 border-emerald-800"
                     : file.format === "word"
                     ? "text-blue-400 bg-blue-950/60 border-blue-800"
-                    : "text-amber-400 bg-amber-950/60 border-amber-800";
+                    : file.format === "powerpoint"
+                    ? "text-amber-400 bg-amber-950/60 border-amber-800"
+                    : file.format === "pdf"
+                    ? "text-rose-400 bg-rose-950/60 border-rose-800"
+                    : "text-purple-400 bg-purple-950/60 border-purple-800";
 
                 const formattedSize =
                   file.size_bytes > 1024 * 1024

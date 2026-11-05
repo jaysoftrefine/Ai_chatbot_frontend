@@ -21,10 +21,13 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -82,23 +85,46 @@ export default function ChatPage() {
   }, [messages, isSending]);
 
   const handleSendMessage = async (customText?: string) => {
-    const textToSend = customText || input;
-    if (!textToSend.trim() || isSending) return;
+    const fileToUpload = attachedFile;
+    let textToSend = customText || input;
+
+    if (!textToSend.trim() && !fileToUpload) return;
+    if (isSending) return;
+
+    if (!textToSend.trim() && fileToUpload) {
+      textToSend = `I uploaded "${fileToUpload.name}". Please summarize its key contents and let me know how you can help me with it.`;
+    }
 
     setError(null);
-    const tempUserMsg: ChatMessage = {
-      id: "temp-" + Date.now(),
-      role: "user",
-      content: textToSend,
-      created_at: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, tempUserMsg]);
+    setAttachedFile(null);
     if (!customText) setInput("");
     setIsSending(true);
 
     try {
-      const res = await api.sendMessage(textToSend, activeConvId || undefined);
+      if (fileToUpload) {
+        setUploadStatus(`Indexing "${fileToUpload.name}" into RAG memory...`);
+        await api.uploadFile(fileToUpload);
+        setUploadStatus(null);
+      }
+
+      const displayContent = fileToUpload
+        ? `📎 Attached & Indexed: **${fileToUpload.name}**\n\n${textToSend}`
+        : textToSend;
+
+      const tempUserMsg: ChatMessage = {
+        id: "temp-" + Date.now(),
+        role: "user",
+        content: displayContent,
+        created_at: new Date().toISOString(),
+      };
+
+      setMessages((prev) => [...prev, tempUserMsg]);
+
+      const promptForAssistant = fileToUpload
+        ? `[User attached document "${fileToUpload.name}"]\n${textToSend}`
+        : textToSend;
+
+      const res = await api.sendMessage(promptForAssistant, activeConvId || undefined);
 
       const asstMsg: ChatMessage = {
         id: "asst-" + Date.now(),
@@ -120,6 +146,7 @@ export default function ChatPage() {
       setError(err instanceof Error ? err.message : "Error sending message");
     } finally {
       setIsSending(false);
+      setUploadStatus(null);
     }
   };
 
@@ -322,7 +349,9 @@ export default function ChatPage() {
                 <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
                 <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse delay-75"></span>
                 <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse delay-150"></span>
-                <span className="text-xs text-zinc-400 ml-2">Assistant is thinking...</span>
+                <span className="text-xs text-zinc-400 ml-2">
+                  {uploadStatus || "Assistant is thinking..."}
+                </span>
               </div>
             </div>
           )}
@@ -340,21 +369,74 @@ export default function ChatPage() {
         <div className="shrink-0 p-4 border-t border-zinc-800 bg-zinc-900/40">
           <div className="max-w-4xl mx-auto">
             <div className="relative rounded-xl border border-zinc-700/80 bg-zinc-950 shadow-inner focus-within:border-indigo-500">
+              {/* Attached file preview chip */}
+              {attachedFile && (
+                <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/90 border-b border-zinc-800 text-xs rounded-t-xl">
+                  <div className="flex items-center space-x-2 truncate">
+                    <span className="text-indigo-400">📎</span>
+                    <span className="font-medium text-zinc-200 truncate">{attachedFile.name}</span>
+                    <span className="text-zinc-500 text-[10px]">
+                      ({(attachedFile.size / 1024).toFixed(1)} KB)
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-950/80 border border-indigo-800 text-indigo-300">
+                      RAG Ready
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAttachedFile(null)}
+                    className="text-zinc-400 hover:text-zinc-100 p-1 rounded text-xs ml-2"
+                    title="Remove attachment"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
               <textarea
                 rows={2}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask a question or request an Office document (Excel, Word, PowerPoint)..."
+                placeholder={
+                  attachedFile
+                    ? `Ask anything about "${attachedFile.name}" or leave empty to summarize...`
+                    : "Ask a question or request an Office document (Excel, Word, PowerPoint)..."
+                }
                 className="w-full resize-none bg-transparent px-4 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none"
               />
               <div className="flex items-center justify-between px-3 py-2 border-t border-zinc-850">
-                <span className="text-[11px] text-zinc-500">
-                  <span className="font-mono">Enter</span> to send, <span className="font-mono">Shift+Enter</span> for newline
-                </span>
+                <div className="flex items-center space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isSending}
+                    className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850 transition-colors border border-transparent hover:border-zinc-700 disabled:opacity-40"
+                    title="Attach document to chat & index into RAG"
+                  >
+                    <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                    <span className="font-medium">Attach File</span>
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) setAttachedFile(f);
+                      e.target.value = "";
+                    }}
+                    className="hidden"
+                    accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.json"
+                  />
+                  <span className="text-[11px] text-zinc-500 hidden sm:inline">
+                    <span className="font-mono">Enter</span> to send, <span className="font-mono">Shift+Enter</span> for newline
+                  </span>
+                </div>
                 <button
                   onClick={() => handleSendMessage()}
-                  disabled={!input.trim() || isSending}
+                  disabled={(!input.trim() && !attachedFile) || isSending}
                   className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all disabled:opacity-40"
                 >
                   Send

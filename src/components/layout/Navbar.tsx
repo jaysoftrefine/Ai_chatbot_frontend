@@ -13,7 +13,7 @@ export default function Navbar() {
   const links = [
     { href: "/", label: "Chat" },
     { href: "/persona", label: "Persona Settings" },
-    { href: "/files", label: "Generated Files" },
+    { href: "/files", label: "Files & Knowledge Base" },
     { href: "/integrations", label: "Microsoft MCP" },
   ];
 

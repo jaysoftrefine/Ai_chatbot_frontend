@@ -164,6 +164,41 @@ class ApiClient {
     return this.request<GeneratedFile[]>("/api/v1/files");
   }
 
+  async uploadFile(file: File): Promise<GeneratedFile> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const headers: Record<string, string> = {};
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token");
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+    }
+
+    const res = await fetch(`${API_BASE_URL}/api/v1/files/upload`, {
+      method: "POST",
+      headers,
+      body: formData,
+      credentials: "include",
+    });
+
+    if (!res.ok) {
+      let errDetail = `${res.status} ${res.statusText}`;
+      try {
+        const body = await res.json();
+        if (body.detail) {
+          errDetail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+        }
+      } catch {
+        // ignore
+      }
+      throw new Error(errDetail);
+    }
+
+    return res.json();
+  }
+
   getFileDownloadUrl(fileId: string): string {
     return `${API_BASE_URL}/api/v1/files/${fileId}/download`;
   }
