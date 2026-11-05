@@ -7,6 +7,7 @@ import {
   MicrosoftStatus,
   PersonaGrouped,
   PersonaPreference,
+  TokenResponse,
   User,
 } from "./types";
 
@@ -14,6 +15,8 @@ export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 class ApiClient {
+  private refreshTokenPromise: Promise<string | null> | null = null;
+
   private getHeaders(): HeadersInit {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -27,7 +30,50 @@ class ApiClient {
     return headers;
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async refreshToken(): Promise<string | null> {
+    if (this.refreshTokenPromise) {
+      return this.refreshTokenPromise;
+    }
+
+    this.refreshTokenPromise = (async () => {
+      try {
+        const storedRefreshToken =
+          typeof window !== "undefined" ? localStorage.getItem("refresh_token") : null;
+
+        const res = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refresh_token: storedRefreshToken || null }),
+          credentials: "include",
+        });
+
+        if (!res.ok) {
+          return null;
+        }
+
+        const data: TokenResponse = await res.json();
+        if (typeof window !== "undefined") {
+          if (data.access_token) localStorage.setItem("token", data.access_token);
+          if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
+        }
+        return data.access_token;
+      } catch {
+        return null;
+      } finally {
+        this.refreshTokenPromise = null;
+      }
+    })();
+
+    return this.refreshTokenPromise;
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    isRetry = false
+  ): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
     const res = await fetch(url, {
       ...options,
@@ -39,8 +85,25 @@ class ApiClient {
     });
 
     if (res.status === 401) {
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login") && !window.location.pathname.startsWith("/register")) {
+      const isAuthEndpoint =
+        endpoint.startsWith("/api/v1/auth/login") ||
+        endpoint.startsWith("/api/v1/auth/register") ||
+        endpoint.startsWith("/api/v1/auth/refresh");
+
+      if (!isAuthEndpoint && !isRetry) {
+        const newToken = await this.refreshToken();
+        if (newToken) {
+          return this.request<T>(endpoint, options, true);
+        }
+      }
+
+      if (
+        typeof window !== "undefined" &&
+        !window.location.pathname.startsWith("/login") &&
+        !window.location.pathname.startsWith("/register")
+      ) {
         localStorage.removeItem("token");
+        localStorage.removeItem("refresh_token");
         // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = "/login";
       }
@@ -68,24 +131,26 @@ class ApiClient {
   }
 
   // Auth
-  async register(email: string, password: string): Promise<{ access_token: string; user: User }> {
-    const data = await this.request<{ access_token: string; user: User }>("/api/v1/auth/register", {
+  async register(email: string, password: string): Promise<TokenResponse> {
+    const data = await this.request<TokenResponse>("/api/v1/auth/register", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
-    if (typeof window !== "undefined" && data.access_token) {
-      localStorage.setItem("token", data.access_token);
+    if (typeof window !== "undefined") {
+      if (data.access_token) localStorage.setItem("token", data.access_token);
+      if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     }
     return data;
   }
 
-  async login(email: string, password: string): Promise<{ access_token: string; user: User }> {
-    const data = await this.request<{ access_token: string; user: User }>("/api/v1/auth/login", {
+  async login(email: string, password: string): Promise<TokenResponse> {
+    const data = await this.request<TokenResponse>("/api/v1/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
-    if (typeof window !== "undefined" && data.access_token) {
-      localStorage.setItem("token", data.access_token);
+    if (typeof window !== "undefined") {
+      if (data.access_token) localStorage.setItem("token", data.access_token);
+      if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     }
     return data;
   }
@@ -96,6 +161,7 @@ class ApiClient {
     } finally {
       if (typeof window !== "undefined") {
         localStorage.removeItem("token");
+        localStorage.removeItem("refresh_token");
       }
     }
   }
@@ -164,7 +230,7 @@ class ApiClient {
     return this.request<GeneratedFile[]>("/api/v1/files");
   }
 
-  async uploadFile(file: File): Promise<GeneratedFile> {
+  async uploadFile(file: File, isRetry = false): Promise<GeneratedFile> {
     const formData = new FormData();
     formData.append("file", file);
 
@@ -182,6 +248,13 @@ class ApiClient {
       body: formData,
       credentials: "include",
     });
+
+    if (res.status === 401 && !isRetry) {
+      const newToken = await this.refreshToken();
+      if (newToken) {
+        return this.uploadFile(file, true);
+      }
+    }
 
     if (!res.ok) {
       let errDetail = `${res.status} ${res.statusText}`;
@@ -203,7 +276,7 @@ class ApiClient {
     return `${API_BASE_URL}/api/v1/files/${fileId}/download`;
   }
 
-  async downloadFileBlob(fileId: string, filename: string): Promise<void> {
+  async downloadFileBlob(fileId: string, filename: string, isRetry = false): Promise<void> {
     const url = this.getFileDownloadUrl(fileId);
     const headers: Record<string, string> = {};
     if (typeof window !== "undefined") {
@@ -216,6 +289,14 @@ class ApiClient {
       credentials: "include",
       headers,
     });
+
+    if (res.status === 401 && !isRetry) {
+      const newToken = await this.refreshToken();
+      if (newToken) {
+        return this.downloadFileBlob(fileId, filename, true);
+      }
+    }
+
     if (!res.ok) {
       throw new Error(`Download failed: ${res.statusText}`);
     }
